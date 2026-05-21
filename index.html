@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plan de Pagos</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="topbar">
+  <h1><i class="ti ti-calendar-due"></i> Plan de Pagos</h1>
+  <div class="topbar-right">
+    <div class="sync-status" id="sync-status">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-text">Conectando...</span>
+    </div>
+    <button class="btn-top" onclick="abrirMeta()"><i class="ti ti-target"></i> Meta</button>
+    <button class="btn-top accent" onclick="abrirNuevaFuente()"><i class="ti ti-plus"></i> Nueva fuente</button>
+  </div>
+</div>
+
+<div class="main">
+  <div id="setup-banner"></div>
+  <div id="meta-section"></div>
+  <div class="summary" id="summary"></div>
+  <div id="cache-banner"></div>
+  <div class="tabs-wrap"><div class="tabs-scroll" id="tabs"></div></div>
+  <div id="contenido"></div>
+</div>
+
+<div id="modal"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
