@@ -255,18 +255,30 @@ body {
 .hist-btn:hover { background: var(--surface2); color: var(--text); }
 .hist-btn.active { background: var(--text); border-color: var(--text); color: #fff; }
 
-/* ─── FUENTE CARD ────────────────────────────────────────────── */
-.fuente-avatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 9px;
+/* ─── GRUPOS POR PERSONA ─────────────────────────────────────── */
+.responsable-block { margin-bottom: 26px; }
+.resp-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 700;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.resp-avatar {
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
   flex-shrink: 0;
 }
+.resp-name { font-size: 16px; font-weight: 600; }
+.resp-info { font-size: 12px; color: var(--text2); margin-top: 1px; }
+
+.fuentes-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px,1fr)); gap: 10px; }
+
+/* ─── FUENTE CARD ────────────────────────────────────────────── */
+.fuente-desc { font-size: 13px; font-weight: 500; margin-left: 5px; }
 .pcard {
   background: var(--surface);
   border: 1px solid var(--border);

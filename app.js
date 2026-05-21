@@ -23,15 +23,17 @@ function cacheLeer() {
 }
 function cacheEsFresca(c) { return c && c._ts && (Date.now() - c._ts) < CACHE_TTL; }
 function cacheAplicar(c) {
-  S.meta    = c.meta    || { monto: 0, desc: '' };
-  S.fuentes = c.fuentes || [];
-  S.nextId  = c.nextId  || 1;
-  S.loaded  = true;
+  S.meta     = c.meta     || { monto: 0, desc: '' };
+  S.personas = c.personas || [];
+  S.fuentes  = c.fuentes  || [];
+  S.nextId   = c.nextId   || 1;
+  S.loaded   = true;
 }
 
 // ── Estado ────────────────────────────────────────────────────────
 let S = {
   meta: { monto: 0, desc: '' },
+  personas: [],
   fuentes: [],
   nextId: 1,
   filtro: 'todas',
@@ -39,6 +41,28 @@ let S = {
   loaded: false,
   usandoCache: false,
 };
+
+// ── Personas ──────────────────────────────────────────────────────
+function initPersonas() {
+  if (!S.personas) S.personas = [];
+  if (!S.personas.length)
+    S.personas.push({ id: S.nextId++, nombre: 'PROPIO', tipo_defecto: 'propio' });
+}
+
+function migrarFuentes() {
+  S.fuentes.forEach(f => {
+    if (f.personaId) return;
+    const nombre = f.nombre || 'SIN NOMBRE';
+    let p = S.personas.find(x => x.nombre === nombre);
+    if (!p) {
+      p = { id: S.nextId++, nombre, tipo_defecto: f.tipo === 'propio' ? 'propio' : 'prestamo' };
+      S.personas.push(p);
+    }
+    f.personaId = p.id;
+  });
+}
+
+function getPersona(pid) { return S.personas.find(p => p.id === pid); }
 
 // ── API Google Sheets ─────────────────────────────────────────────
 async function apiCall(action, data={}) {
@@ -65,22 +89,24 @@ async function cargarDatos() {
   }
   const cached = cacheLeer();
   if (cacheEsFresca(cached)) {
-    cacheAplicar(cached);
+    cacheAplicar(cached); initPersonas(); migrarFuentes();
     setSyncStatus('ok', 'Datos en caché');
     render();
     return;
   }
-  if (cached) { cacheAplicar(cached); render(); setSyncStatus('syncing', 'Actualizando...'); }
+  if (cached) { cacheAplicar(cached); initPersonas(); migrarFuentes(); render(); setSyncStatus('syncing', 'Actualizando...'); }
   else          setSyncStatus('syncing', 'Cargando...');
 
   const data = await apiCall('getData');
   if (data && data.ok) {
-    S.meta    = data.meta    || { monto: 0, desc: '' };
-    S.fuentes = data.fuentes || [];
-    S.nextId  = data.nextId  || 1;
-    S.loaded  = true;
+    S.meta     = data.meta     || { monto: 0, desc: '' };
+    S.personas = data.personas || [];
+    S.fuentes  = data.fuentes  || [];
+    S.nextId   = data.nextId   || 1;
+    S.loaded   = true;
     S.usandoCache = false;
-    cacheGuardar({ meta: S.meta, fuentes: S.fuentes, nextId: S.nextId });
+    initPersonas(); migrarFuentes();
+    cacheGuardar({ meta:S.meta, personas:S.personas, fuentes:S.fuentes, nextId:S.nextId });
     setSyncStatus('ok', 'Sincronizado');
   } else {
     S.usandoCache = !!cached;
@@ -91,8 +117,9 @@ async function cargarDatos() {
 
 async function guardarTodo() {
   if (!CONFIG.SCRIPT_URL) return;
-  const result = await apiCall('saveData', { meta: S.meta, fuentes: S.fuentes, nextId: S.nextId });
-  if (result && result.ok) cacheGuardar({ meta: S.meta, fuentes: S.fuentes, nextId: S.nextId });
+  const payload = { meta:S.meta, personas:S.personas, fuentes:S.fuentes, nextId:S.nextId };
+  const result = await apiCall('saveData', payload);
+  if (result && result.ok) cacheGuardar(payload);
 }
 
 function setSyncStatus(tipo, texto) {
@@ -285,6 +312,80 @@ function renderTabs() {
 function setFiltro(f) { S.filtro=f; S.tabActivo='lista'; renderTabs(); renderContenido(); }
 function setTab(t)    { S.tabActivo=t; renderTabs(); renderContenido(); }
 
+function renderFuenteCard(f) {
+  const capitalActual = getCapitalActual(f);
+  const esPropio      = f.tipo === 'propio';
+  const hoy           = new Date();
+  const interesActual = getCuotaMes(f, hoy.getMonth()+1, hoy.getFullYear());
+
+  const tipoBadge = esPropio
+    ? `<span class="tipo-badge propio">Sin interés</span>`
+    : `<span class="tipo-badge prestamo">${f.tasa_pct}% mensual</span>`;
+
+  const etiqueta = f.desc
+    ? `<span class="fuente-desc">${f.desc}</span>`
+    : `<span class="fuente-desc" style="color:var(--text3)">${fechaDisp(f.fecha)}</span>`;
+
+  const abonosHtml = (f.abonos||[]).length
+    ? `<div class="abonos-wrap">${(f.abonos||[]).map(a =>
+        `<div class="abono-item">
+          <span class="abono-desc"><i class="ti ti-corner-down-right" style="font-size:10px;margin-right:3px;color:var(--text3)"></i>${a.desc||fechaDisp(a.fecha)}</span>
+          <span class="abono-monto">-${fmt(a.monto)}</span>
+        </div>`).join('')}</div>`
+    : '';
+
+  let bodyHtml = '';
+  if (!esPropio) {
+    const meses = getMesesFuente(f);
+    const mesesHtml = meses.map(({mes,anio,cuota}) => {
+      const pagado  = cuota && cuota.estado==='pagado';
+      const clase   = pagado ? 'pagado' : cuota ? cuota.estado : 'sin-cuota';
+      const monto   = cuota ? cuota.monto : getCuotaMes(f, mes, anio);
+      const chkClass= pagado ? ' pagado' : '';
+      const chkIcon = pagado ? '<i class="ti ti-check"></i>' : '';
+      const chkClick= pagado
+        ? `desmarcarCuota(${f.id},${mes},${anio})`
+        : `abrirPagarCuota(${f.id},${mes},${anio})`;
+      const delBtn  = cuota
+        ? `<button class="icon-btn" onclick="eliminarCuota(${f.id},'${cuota.id}')" title="Eliminar"><i class="ti ti-x"></i></button>`
+        : `<button class="icon-btn" onclick="ocultarMesFuente(${f.id},${mes},${anio})" title="Ocultar"><i class="ti ti-x"></i></button>`;
+      return `<div class="mes-row ${clase}">
+        <div class="mes-left">
+          <button class="chk-btn${chkClass}" onclick="${chkClick}" title="${pagado?'Desmarcar':'Registrar pago'}">${chkIcon}</button>
+          <span class="mes-name">${MESES_C[mes-1]} ${anio}</span>
+        </div>
+        <div class="mes-right">
+          <span class="mes-monto">${fmt(monto)}</span>
+          ${delBtn}
+        </div>
+      </div>`;
+    }).join('') || '<div style="font-size:12px;color:var(--text3);padding:4px 0">Sin cuotas aún</div>';
+
+    bodyHtml = `<div class="pcard-body">
+      ${mesesHtml}
+      <button class="btn-add-mes" onclick="abrirPagarProximoMes(${f.id})"><i class="ti ti-plus" style="font-size:12px"></i> Agregar mes</button>
+    </div>`;
+  }
+
+  return `<div class="pcard">
+    <div class="pcard-head">
+      <div class="pcard-info">
+        <div class="pcard-nombre-row">
+          ${tipoBadge}${etiqueta}
+        </div>
+        <div class="pcard-cuota" style="margin-top:3px">${fmt(f.monto)}${!esPropio&&capitalActual<f.monto?` · Saldo: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>`:''}</div>
+        ${!esPropio?`<div class="pcard-desde"><span style="color:var(--red-mid);font-weight:600">${fmt(interesActual)}/mes</span> · desde ${fechaDisp(f.fecha)}</div>`:`<div class="pcard-desde">Ingresado ${fechaDisp(f.fecha)}</div>`}
+        ${abonosHtml}
+      </div>
+      <div class="pcard-actions">
+        ${!esPropio?`<button class="icon-btn pcard-btn-cash" onclick="abrirAbonar(${f.id})" title="Abonar a capital"><i class="ti ti-trending-down"></i></button>`:''}
+        <button class="icon-btn pcard-btn-del" onclick="eliminarFuente(${f.id})" title="Eliminar fuente"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>
+    ${bodyHtml}
+  </div>`;
+}
+
 function renderContenido() {
   if (S.tabActivo==='historial') { renderHistorial(); return; }
   const fuentes = fuentesFiltradas();
@@ -293,78 +394,36 @@ function renderContenido() {
     el.innerHTML='<div class="empty"><i class="ti ti-building-bank"></i>No hay fuentes registradas</div>';
     return;
   }
-  el.innerHTML = fuentes.map(f => {
-    const idx   = S.fuentes.indexOf(f);
-    const color = colorIdx(idx);
-    const ini   = f.nombre.split(/[\s\/]+/).map(x=>x[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
-    const capitalActual = getCapitalActual(f);
-    const esPropio      = f.tipo==='propio';
-    const hoy           = new Date();
-    const interesActual = getCuotaMes(f, hoy.getMonth()+1, hoy.getFullYear());
 
-    const tipoBadge = esPropio
-      ? `<span class="tipo-badge propio">Sin interés</span>`
-      : `<span class="tipo-badge prestamo">${f.tasa_pct}% mensual</span>`;
+  // Agrupar por persona
+  const grupos = {};
+  fuentes.forEach(f => {
+    const pid = f.personaId || 0;
+    if (!grupos[pid]) grupos[pid] = [];
+    grupos[pid].push(f);
+  });
 
-    const abonosHtml = (f.abonos||[]).length
-      ? `<div class="abonos-wrap">${(f.abonos||[]).map(a =>
-          `<div class="abono-item">
-            <span class="abono-desc"><i class="ti ti-corner-down-right" style="font-size:10px;margin-right:3px;color:var(--text3)"></i>${a.desc||fechaDisp(a.fecha)}</span>
-            <span class="abono-monto">-${fmt(a.monto)}</span>
-          </div>`).join('')}</div>`
-      : '';
+  el.innerHTML = Object.entries(grupos).map(([pidStr, fs]) => {
+    const pid     = parseInt(pidStr);
+    const persona = getPersona(pid);
+    const nombre  = persona ? persona.nombre : 'Sin persona';
+    const pi      = S.personas.indexOf(persona);
+    const color   = colorIdx(pi >= 0 ? pi : 0);
+    const ini     = nombre.split(/[\s\/]+/).map(x=>x[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
+    const hoy     = new Date();
+    const totalMonto   = fs.reduce((s,f) => s+f.monto, 0);
+    const interesTotal = fs.reduce((s,f) => s+getCuotaMes(f,hoy.getMonth()+1,hoy.getFullYear()), 0);
 
-    let bodyHtml = '';
-    if (!esPropio) {
-      const meses = getMesesFuente(f);
-      const mesesHtml = meses.map(({mes,anio,cuota}) => {
-        const pagado  = cuota && cuota.estado==='pagado';
-        const clase   = pagado ? 'pagado' : cuota ? cuota.estado : 'sin-cuota';
-        const monto   = cuota ? cuota.monto : getCuotaMes(f, mes, anio);
-        const chkClass= pagado ? ' pagado' : '';
-        const chkIcon = pagado ? '<i class="ti ti-check"></i>' : '';
-        const chkClick= pagado
-          ? `desmarcarCuota(${f.id},${mes},${anio})`
-          : `abrirPagarCuota(${f.id},${mes},${anio})`;
-        const delBtn  = cuota
-          ? `<button class="icon-btn" onclick="eliminarCuota(${f.id},'${cuota.id}')" title="Eliminar"><i class="ti ti-x"></i></button>`
-          : `<button class="icon-btn" onclick="ocultarMesFuente(${f.id},${mes},${anio})" title="Ocultar"><i class="ti ti-x"></i></button>`;
-        return `<div class="mes-row ${clase}">
-          <div class="mes-left">
-            <button class="chk-btn${chkClass}" onclick="${chkClick}" title="${pagado?'Desmarcar':'Registrar pago'}">${chkIcon}</button>
-            <span class="mes-name">${MESES_C[mes-1]} ${anio}</span>
-          </div>
-          <div class="mes-right">
-            <span class="mes-monto">${fmt(monto)}</span>
-            ${delBtn}
-          </div>
-        </div>`;
-      }).join('') || '<div style="font-size:12px;color:var(--text3);padding:4px 0">Sin cuotas aún</div>';
-
-      bodyHtml = `<div class="pcard-body">
-        ${mesesHtml}
-        <button class="btn-add-mes" onclick="abrirPagarProximoMes(${f.id})"><i class="ti ti-plus" style="font-size:12px"></i> Agregar mes</button>
-      </div>`;
-    }
-
-    return `<div class="pcard">
-      <div class="pcard-head">
-        <div class="fuente-avatar" style="background:${color.bg};color:${color.text}">${ini}</div>
-        <div class="pcard-info">
-          <div class="pcard-nombre-row">
-            <span class="pcard-capital">${f.nombre}</span>
-            ${tipoBadge}
-          </div>
-          <div class="pcard-cuota">${fmt(f.monto)}${!esPropio&&capitalActual<f.monto?` · Saldo: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>`:''}</div>
-          <div class="pcard-desde"><i class="ti ti-calendar-event" style="font-size:10px;vertical-align:-1px;margin-right:3px"></i>${fechaDisp(f.fecha)}${!esPropio?` · <span style="color:var(--red-mid);font-weight:600">${fmt(interesActual)}/mes</span>`:''}</div>
-          ${abonosHtml}
+    return `<div class="responsable-block">
+      <div class="resp-header">
+        <div class="resp-avatar" style="background:${color.bg};color:${color.text}">${ini}</div>
+        <div style="flex:1;min-width:0">
+          <div class="resp-name">${nombre}</div>
+          <div class="resp-info">${fs.length} fuente${fs.length>1?'s':''} · ${fmt(totalMonto)}${interesTotal>0?' · <span style="color:var(--red-mid)">'+fmt(interesTotal)+'/mes</span>':''}</div>
         </div>
-        <div class="pcard-actions">
-          ${!esPropio?`<button class="icon-btn pcard-btn-cash" onclick="abrirAbonar(${f.id})" title="Abonar a capital"><i class="ti ti-trending-down"></i></button>`:''}
-          <button class="icon-btn pcard-btn-del" onclick="eliminarFuente(${f.id})" title="Eliminar fuente"><i class="ti ti-trash"></i></button>
-        </div>
+        <button class="icon-btn" onclick="abrirNuevaFuente(${pid})" title="Agregar fuente a ${nombre}" style="width:28px;height:28px;background:var(--surface2);color:var(--text2)"><i class="ti ti-plus"></i></button>
       </div>
-      ${bodyHtml}
+      <div class="fuentes-lista">${fs.map(f => renderFuenteCard(f)).join('')}</div>
     </div>`;
   }).join('');
 }
@@ -568,22 +627,42 @@ async function guardarMeta() {
   cerrar(); render(); await guardarTodo();
 }
 
-function abrirNuevaFuente() {
-  const hoy = new Date().toISOString().split('T')[0];
+function abrirNuevaFuente(preselPersonaId = null) {
+  const hoy       = new Date().toISOString().split('T')[0];
+  const tieneP    = S.personas.length > 0;
+  const presel    = preselPersonaId || (tieneP ? S.personas[0].id : null);
+  const tipoDefecto = presel ? (getPersona(presel)?.tipo_defecto || 'propio') : 'propio';
+
+  const optsPersona = S.personas.map(p =>
+    `<option value="${p.id}"${p.id===presel?' selected':''}>${p.nombre}</option>`
+  ).join('');
+
+  const selectHtml = tieneP
+    ? `<div class="form-group"><label>¿De quién proviene?</label>
+        <select id="f-persona" onchange="onPersonaChange(this.value)">
+          ${optsPersona}
+          <option value="nueva">+ Nueva persona...</option>
+        </select>
+       </div>`
+    : '';
+
   modal('Nueva fuente de dinero',
-    `<div class="form-group"><label>Nombre / Quién presta</label>
-      <input id="f-nombre" type="text" placeholder="Ej: BANCO X, TÍA MARÍA" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+    `${selectHtml}
+    <div id="f-nueva-wrap" style="display:none">
+      <div class="form-group"><label>Nombre de la persona</label>
+        <input id="f-nueva-nombre" type="text" placeholder="Ej: BANCO X, TÍA MARÍA" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+      </div>
     </div>
     <div class="form-group"><label>Tipo</label>
       <select id="f-tipo" onchange="toggleTipoForm(this.value)">
-        <option value="prestamo">Préstamo — genera interés</option>
-        <option value="propio">Recursos propios — sin interés</option>
+        <option value="propio"${tipoDefecto==='propio'?' selected':''}>Recursos propios — sin interés</option>
+        <option value="prestamo"${tipoDefecto==='prestamo'?' selected':''}>Préstamo — genera interés</option>
       </select>
     </div>
     <div class="form-group"><label>Monto ($)</label>
       <input id="f-monto" type="number" placeholder="5000000" oninput="actualizarPreviewFuente()">
     </div>
-    <div id="f-tasa-wrap">
+    <div id="f-tasa-wrap"${tipoDefecto==='propio'?' style="display:none"':''}>
       <div class="form-row">
         <div class="form-group"><label>Tasa mensual (%)</label>
           <input id="f-tasa" type="number" value="2" step="0.1" min="0" oninput="actualizarPreviewFuente()">
@@ -593,6 +672,9 @@ function abrirNuevaFuente() {
         </div>
       </div>
     </div>
+    <div class="form-group"><label>Descripción (opcional)</label>
+      <input id="f-desc" type="text" placeholder="Ej: Segunda cuota, Para negocio...">
+    </div>
     <div class="form-group"><label>Fecha de ingreso</label>
       <input id="f-fecha" type="date" value="${hoy}">
       <div class="form-hint">El día de esta fecha define cuándo empieza a generar interés</div>
@@ -600,6 +682,18 @@ function abrirNuevaFuente() {
     `<button class="btn-cancel" onclick="cerrar()">Cancelar</button>
      <button class="btn-save" onclick="guardarFuente()">Guardar</button>`
   );
+}
+
+function onPersonaChange(v) {
+  document.getElementById('f-nueva-wrap').style.display = v==='nueva' ? 'block' : 'none';
+  if (v !== 'nueva') {
+    const p = getPersona(parseInt(v));
+    if (p) {
+      const tipo = p.tipo_defecto || 'propio';
+      document.getElementById('f-tipo').value = tipo;
+      toggleTipoForm(tipo);
+    }
+  }
 }
 
 function toggleTipoForm(v) {
@@ -613,13 +707,27 @@ function actualizarPreviewFuente() {
 }
 
 async function guardarFuente() {
-  const nombre = document.getElementById('f-nombre').value.trim();
-  const tipo   = document.getElementById('f-tipo').value;
-  const monto  = parseFloat(document.getElementById('f-monto').value)||0;
-  const tasa   = tipo==='propio' ? 0 : (parseFloat(document.getElementById('f-tasa').value)||0);
-  const fecha  = document.getElementById('f-fecha').value;
-  if (!nombre||!monto||!fecha) { alert('Completa todos los campos'); return; }
-  S.fuentes.push({ id:S.nextId++, nombre, tipo, monto, tasa_pct:tasa, fecha, cuotas:[], abonos:[], mesesOcultos:[] });
+  const personaEl = document.getElementById('f-persona');
+  const pv   = personaEl ? personaEl.value : 'nueva';
+  const tipo = document.getElementById('f-tipo').value;
+  const monto= parseFloat(document.getElementById('f-monto').value)||0;
+  const tasa = tipo==='propio' ? 0 : (parseFloat(document.getElementById('f-tasa')?.value)||0);
+  const fecha= document.getElementById('f-fecha').value;
+  const desc = document.getElementById('f-desc')?.value.trim() || '';
+  if (!monto||!fecha) { alert('Completa el monto y la fecha'); return; }
+
+  let personaId;
+  if (pv==='nueva') {
+    const nn = document.getElementById('f-nueva-nombre')?.value.trim();
+    if (!nn) { alert('Ingresa el nombre de la persona'); return; }
+    const np = { id:S.nextId++, nombre:nn, tipo_defecto:tipo };
+    S.personas.push(np);
+    personaId = np.id;
+  } else {
+    personaId = parseInt(pv);
+  }
+
+  S.fuentes.push({ id:S.nextId++, personaId, tipo, monto, tasa_pct:tasa, fecha, desc, cuotas:[], abonos:[], mesesOcultos:[] });
   cerrar(); render(); await guardarTodo();
 }
 
@@ -627,9 +735,11 @@ function abrirAbonar(fid) {
   const f = S.fuentes.find(x => x.id===fid);
   const capitalActual = getCapitalActual(f);
   const hoy = new Date().toISOString().split('T')[0];
+  const persona = getPersona(f.personaId);
+  const pNombre = persona ? persona.nombre : '';
   modal('Abonar a capital',
     `<p style="font-size:13px;color:var(--text2);margin-bottom:14px">
-      <strong>${f.nombre}</strong> · Capital actual:
+      <strong>${pNombre}${f.desc?' · '+f.desc:''}</strong> · Capital actual:
       <strong style="font-family:'IBM Plex Mono',monospace;color:var(--green-mid)">${fmt(capitalActual)}</strong>
     </p>
     <div class="form-group"><label>Monto del abono ($)</label>
