@@ -323,12 +323,15 @@ function renderContenido() {
         const monto   = cuota ? cuota.monto : getCuotaMes(f, mes, anio);
         const chkClass= pagado ? ' pagado' : '';
         const chkIcon = pagado ? '<i class="ti ti-check"></i>' : '';
+        const chkClick= pagado
+          ? `desmarcarCuota(${f.id},${mes},${anio})`
+          : `abrirPagarCuota(${f.id},${mes},${anio})`;
         const delBtn  = cuota
           ? `<button class="icon-btn" onclick="eliminarCuota(${f.id},'${cuota.id}')" title="Eliminar"><i class="ti ti-x"></i></button>`
           : `<button class="icon-btn" onclick="ocultarMesFuente(${f.id},${mes},${anio})" title="Ocultar"><i class="ti ti-x"></i></button>`;
         return `<div class="mes-row ${clase}">
           <div class="mes-left">
-            <button class="chk-btn${chkClass}" onclick="toggleCuota(${f.id},${mes},${anio})" title="${pagado?'Marcar pendiente':'Marcar pagado'}">${chkIcon}</button>
+            <button class="chk-btn${chkClass}" onclick="${chkClick}" title="${pagado?'Desmarcar':'Registrar pago'}">${chkIcon}</button>
             <span class="mes-name">${MESES_C[mes-1]} ${anio}</span>
           </div>
           <div class="mes-right">
@@ -340,7 +343,7 @@ function renderContenido() {
 
       bodyHtml = `<div class="pcard-body">
         ${mesesHtml}
-        <button class="btn-add-mes" onclick="agregarMesSiguiente(${f.id})"><i class="ti ti-plus" style="font-size:12px"></i> Agregar mes</button>
+        <button class="btn-add-mes" onclick="abrirPagarProximoMes(${f.id})"><i class="ti ti-plus" style="font-size:12px"></i> Agregar mes</button>
       </div>`;
     }
 
@@ -418,19 +421,80 @@ function renderHistorial() {
 }
 
 // ── Acciones ──────────────────────────────────────────────────────
-async function toggleCuota(fid, mes, anio) {
+function abrirPagarCuota(fid, mes, anio) {
+  const f       = S.fuentes.find(x => x.id===fid);
+  const cuota   = (f.cuotas||[]).find(c => c.mes===mes && c.anio===anio);
+  const interes = cuota ? cuota.monto : getCuotaMes(f, mes, anio);
+  modal(`Registrar pago — ${MESES_N[mes-1]} ${anio}`,
+    `<div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;color:var(--red);font-weight:500"><i class="ti ti-alert-circle" style="vertical-align:-2px;margin-right:4px"></i>Interés mínimo</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;color:var(--red-mid)">${fmt(interes)}</span>
+    </div>
+    <div class="form-group">
+      <label>¿Cuánto vas a pagar?</label>
+      <input id="pp-monto" type="number" placeholder="${interes}" oninput="actualizarPreviewPago(${interes})" autofocus>
+    </div>
+    <div id="pp-preview" class="pp-preview-box">Ingresa un monto para ver el desglose</div>`,
+    `<button class="btn-cancel" onclick="cerrar()">Cancelar</button>
+     <button class="btn-save" onclick="guardarPagoCuota(${fid},${mes},${anio},${interes})">Registrar pago</button>`
+  );
+}
+
+function actualizarPreviewPago(interes) {
+  const monto = parseFloat(document.getElementById('pp-monto')?.value) || 0;
+  const el    = document.getElementById('pp-preview');
+  if (!el) return;
+  if (!monto) { el.textContent='Ingresa un monto para ver el desglose'; el.className='pp-preview-box'; return; }
+  if (monto < interes) {
+    el.innerHTML=`<i class="ti ti-alert-circle" style="vertical-align:-2px;margin-right:4px"></i>Faltan <strong>${fmt(interes-monto)}</strong> para cubrir el interés`;
+    el.className='pp-preview-box warn';
+  } else {
+    const abono = monto - interes;
+    el.innerHTML=`<i class="ti ti-check" style="vertical-align:-2px;margin-right:4px"></i>${fmt(interes)} a interés${abono>0?` · <strong>${fmt(abono)}</strong> abono a capital`:''}`;
+    el.className='pp-preview-box ok';
+  }
+}
+
+async function guardarPagoCuota(fid, mes, anio, interes) {
+  const monto = parseFloat(document.getElementById('pp-monto')?.value) || 0;
+  if (!monto) { alert('Ingresa un monto'); return; }
+  const f     = S.fuentes.find(x => x.id===fid);
+  const hoy   = new Date().toISOString().split('T')[0];
+  const estado= monto >= interes ? 'pagado' : 'pendiente';
+  if (!f.cuotas) f.cuotas=[];
+  let cuota = f.cuotas.find(c => c.mes===mes && c.anio===anio);
+  if (cuota) {
+    cuota.estado=estado; cuota.fecha_pago=estado==='pagado'?hoy:null;
+  } else {
+    f.cuotas.push({ id:'q'+S.nextId++, mes, anio, monto:interes, estado, fecha_pago:estado==='pagado'?hoy:null });
+  }
+  if (monto > interes) {
+    if (!f.abonos) f.abonos=[];
+    f.abonos.push({ id:'a'+S.nextId++, monto:monto-interes, fecha:hoy, desc:`Abono ${MESES_C[mes-1]} ${anio}` });
+    f.abonos.sort((a,b) => a.fecha.localeCompare(b.fecha));
+  }
+  cerrar(); render(); await guardarTodo();
+}
+
+async function desmarcarCuota(fid, mes, anio) {
   const f     = S.fuentes.find(x => x.id===fid);
   const cuota = (f.cuotas||[]).find(c => c.mes===mes && c.anio===anio);
-  if (!f.cuotas) f.cuotas=[];
-  if (cuota) {
-    cuota.estado     = cuota.estado==='pagado' ? 'pendiente' : 'pagado';
-    cuota.fecha_pago = cuota.estado==='pagado' ? new Date().toISOString().split('T')[0] : null;
+  if (cuota) { cuota.estado='pendiente'; cuota.fecha_pago=null; }
+  render(); await guardarTodo();
+}
+
+function abrirPagarProximoMes(fid) {
+  const f     = S.fuentes.find(x => x.id===fid);
+  const meses = getMesesFuente(f);
+  let nm, ny;
+  if (meses.length) {
+    const last=meses[meses.length-1]; nm=last.mes+1; ny=last.anio;
+    if (nm>12) { nm=1; ny++; }
   } else {
-    const hoy = new Date().toISOString().split('T')[0];
-    f.cuotas.push({ id:'q'+S.nextId++, mes, anio, monto:getCuotaMes(f,mes,anio), estado:'pagado', fecha_pago:hoy });
+    const hoy=new Date(); nm=hoy.getMonth()+2; ny=hoy.getFullYear();
+    if (nm>12) { nm=1; ny++; }
   }
-  render();
-  await guardarTodo();
+  abrirPagarCuota(fid, nm, ny);
 }
 
 async function eliminarCuota(fid, cid) {
