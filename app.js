@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────
 // CONFIGURACIÓN
 // ─────────────────────────────────────────────────────────────────
-const CONFIG = { SCRIPT_URL: '' };
+const CONFIG = { SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyjI1dk1DEsVnlNEGwaALYMRKNiteJqxRFWSO29FCmHl6u139XLfQibZndYmjG5fZfNnA/exec' };
 
 const MESES_N = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_C = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
