@@ -672,5 +672,81 @@ body {
   color: var(--text2);
 }
 
+/* ─── CONTROL DE INTERESES ───────────────────────────────────── */
+.ci-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.ci-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.ci-card-nombre { font-size: 15px; font-weight: 600; }
+.ci-card-info   { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.ci-interes-mes {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--red-mid);
+}
+.ci-interes-mes-label { font-size: 11px; font-weight: 500; color: var(--text3); }
+
+.ci-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ci-table thead tr { background: var(--surface2); }
+.ci-table th {
+  padding: 6px 12px;
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.ci-table td { padding: 8px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+
+.ci-row-actual td { background: rgba(203,240,226,0.09); }
+.ci-row-pagado .ci-mes { color: var(--text3); }
+
+.ci-mes       { font-weight: 600; white-space: nowrap; }
+.ci-interes-val { font-family: 'IBM Plex Mono', monospace; font-weight: 600; white-space: nowrap; }
+.ci-check     { text-align: center; width: 36px; padding-left: 4px; padding-right: 4px; }
+.ci-check-btn {
+  background: none; border: none; cursor: pointer; padding: 2px;
+  color: var(--text3); display: inline-flex; align-items: center;
+  transition: color .15s;
+}
+.ci-check-btn:hover { color: var(--green-mid); }
+.ci-fecha     { font-size: 11px; color: var(--text2); white-space: nowrap; }
+.ci-abono-col { text-align: right; }
+.ci-abono-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--green-mid); background: var(--green-bg);
+  padding: 2px 8px; border-radius: 5px;
+  display: inline-flex; align-items: center;
+}
+.ci-abono-btn {
+  font-size: 11px; font-weight: 500;
+  color: var(--text3); background: none;
+  border: 1px dashed var(--border2);
+  border-radius: 5px; padding: 2px 8px;
+  cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center;
+}
+.ci-abono-btn:hover {
+  color: var(--green-mid);
+  border-color: var(--green-border);
+  background: var(--green-bg);
+}
+
 /* ─── ANIMATIONS ─────────────────────────────────────────────── */
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }

@@ -328,17 +328,30 @@ function renderCacheBanner() {
 }
 
 function renderTabs() {
-  const enLista = S.tabActivo !== 'historial';
-  const segHtml = `<div class="seg-ctrl">
-    <button class="seg-btn${enLista&&S.filtro==='todas'?' active':''}"   onclick="setFiltro('todas')">Todas</button>
-    <button class="seg-btn${enLista&&S.filtro==='interes'?' active':''}" onclick="setFiltro('interes')">Con interés</button>
-    <button class="seg-btn${enLista&&S.filtro==='propio'?' active':''}"  onclick="setFiltro('propio')">Propios</button>
+  const enIntereses = S.tabActivo === 'intereses';
+  const enPlan      = !enIntereses;
+
+  const mainTabs = `<div class="filtros-bar" style="margin-bottom:8px">
+    <div class="seg-ctrl">
+      <button class="seg-btn${enPlan?' active':''}" onclick="setTab('lista')">Plan de pagos</button>
+      <button class="seg-btn${enIntereses?' active':''}" onclick="setTab('intereses')"><i class="ti ti-percentage" style="font-size:11px;margin-right:3px;vertical-align:-1px"></i>Control de intereses</button>
+    </div>
   </div>`;
-  const histHtml = `<button class="hist-btn${S.tabActivo==='historial'?' active':''}" onclick="setTab('historial')">
-    <i class="ti ti-history" style="font-size:12px"></i> Historial
-  </button>`;
-  document.getElementById('tabs').innerHTML =
-    `<div class="filtros-bar">${segHtml}<span class="filtros-gap"></span>${histHtml}</div>`;
+
+  let subBar = '';
+  if (enPlan) {
+    const segHtml = `<div class="seg-ctrl">
+      <button class="seg-btn${S.filtro==='todas'&&S.tabActivo!=='historial'?' active':''}"   onclick="setFiltro('todas')">Todas</button>
+      <button class="seg-btn${S.filtro==='interes'&&S.tabActivo!=='historial'?' active':''}" onclick="setFiltro('interes')">Con interés</button>
+      <button class="seg-btn${S.filtro==='propio'&&S.tabActivo!=='historial'?' active':''}"  onclick="setFiltro('propio')">Propios</button>
+    </div>`;
+    const histHtml = `<button class="hist-btn${S.tabActivo==='historial'?' active':''}" onclick="setTab('historial')">
+      <i class="ti ti-history" style="font-size:12px"></i> Historial
+    </button>`;
+    subBar = `<div class="filtros-bar">${segHtml}<span class="filtros-gap"></span>${histHtml}</div>`;
+  }
+
+  document.getElementById('tabs').innerHTML = mainTabs + subBar;
 }
 
 function setFiltro(f) { S.filtro=f; S.tabActivo='lista'; renderTabs(); renderContenido(); }
@@ -474,7 +487,8 @@ function renderFuenteCard(f) {
 }
 
 function renderContenido() {
-  if (S.tabActivo==='historial') { renderHistorial(); return; }
+  if (S.tabActivo==='historial')  { renderHistorial(); return; }
+  if (S.tabActivo==='intereses')  { renderControlIntereses(); return; }
   const fuentes = fuentesFiltradas();
   const el = document.getElementById('contenido');
   if (!fuentes.length) {
@@ -513,6 +527,114 @@ function renderContenido() {
       <div class="fuentes-lista">${fs.map(f => renderFuenteCard(f)).join('')}</div>
     </div>`;
   }).join('');
+}
+
+// ── Control de Intereses ──────────────────────────────────────────
+function renderControlIntereses() {
+  const el = document.getElementById('contenido');
+  const fuentes = S.fuentes.filter(f =>
+    f.tipo === 'prestamo' && f.tasa_pct && (f.consignaciones||[]).length > 0
+  );
+
+  if (!fuentes.length) {
+    el.innerHTML = '<div class="empty"><i class="ti ti-percentage"></i>No hay fuentes con interés activo</div>';
+    return;
+  }
+
+  const grupos = {};
+  fuentes.forEach(f => {
+    const pid = f.personaId || 0;
+    if (!grupos[pid]) grupos[pid] = [];
+    grupos[pid].push(f);
+  });
+
+  el.innerHTML = Object.entries(grupos).map(([pidStr, fs]) => {
+    const pid     = parseInt(pidStr);
+    const persona = getPersona(pid);
+    const nombre  = persona ? persona.nombre : 'Sin persona';
+    const pi      = S.personas.indexOf(persona);
+    const color   = colorIdx(pi >= 0 ? pi : 0);
+    const ini     = nombre.split(/[\s\/]+/).map(x=>x[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
+
+    const totalAbonos = fs.reduce((s,f) => s + (f.abonos||[]).reduce((a,b) => a+b.monto, 0), 0);
+    const hoy = new Date();
+    const totalPendiente = fs.reduce((s,f) =>
+      s + getMesesFuente(f)
+          .filter(({cuota}) => !cuota || cuota.estado !== 'pagado')
+          .reduce((a,{mes,anio}) => a + getCuotaMes(f,mes,anio), 0), 0);
+
+    return `<div class="responsable-block">
+      <div class="resp-header">
+        <div class="resp-avatar" style="background:${color.bg};color:${color.text}">${ini}</div>
+        <div style="flex:1;min-width:0">
+          <div class="resp-name">${nombre}</div>
+          <div class="resp-info">${fs.length} fuente${fs.length>1?'s':''} con interés${totalAbonos>0?` · <span style="color:var(--green-mid)">${fmt(totalAbonos)} abonados a capital</span>`:''}${totalPendiente>0?` · <span style="color:var(--red-mid)">${fmt(totalPendiente)} pendiente</span>`:''}</div>
+        </div>
+      </div>
+      ${fs.map(f => renderInteresCard(f)).join('')}
+    </div>`;
+  }).join('');
+}
+
+function renderInteresCard(f) {
+  const hoy = new Date();
+  const hy = hoy.getFullYear(), hm = hoy.getMonth()+1;
+  const capitalActual = getCapitalActual(f);
+  const interesHoy    = getCuotaMes(f, hm, hy);
+  const meses         = getMesesFuente(f);
+
+  const filas = meses.map(({mes, anio, cuota}) => {
+    const interesMes  = getCuotaMes(f, mes, anio);
+    const pagado      = cuota && cuota.estado === 'pagado';
+    const fechaPago   = pagado && cuota.fecha_pago ? fechaDisp(cuota.fecha_pago) : '';
+    const esActual    = mes === hm && anio === hy;
+
+    const abonosMes     = (f.abonos||[]).filter(a => { const [ay,am]=a.fecha.split('-').map(Number); return ay===anio&&am===mes; });
+    const totalAbonoMes = abonosMes.reduce((s,a) => s+a.monto, 0);
+
+    const checkHtml = pagado
+      ? `<button class="ci-check-btn" onclick="desmarcarCuota(${f.id},${mes},${anio})" title="Desmarcar pago">
+           <i class="ti ti-circle-check" style="color:var(--green-mid);font-size:17px"></i></button>`
+      : `<button class="ci-check-btn" onclick="abrirPagarCuota(${f.id},${mes},${anio})" title="Registrar pago">
+           <i class="ti ti-circle" style="font-size:17px"></i></button>`;
+
+    const abonoCell = totalAbonoMes > 0
+      ? `<span class="ci-abono-tag"><i class="ti ti-trending-down" style="font-size:9px;margin-right:3px"></i>${fmt(totalAbonoMes)}</span>`
+      : `<button class="ci-abono-btn" onclick="abrirAbonar(${f.id})"><i class="ti ti-plus" style="font-size:9px;margin-right:2px"></i>Abonar</button>`;
+
+    return `<tr class="ci-row${esActual?' ci-row-actual':''}${pagado?' ci-row-pagado':''}">
+      <td class="ci-mes">${MESES_C[mes-1]} ${anio}</td>
+      <td class="ci-interes-val" style="${pagado?'color:var(--text3)':'color:var(--red-mid)'}">${fmt(interesMes)}</td>
+      <td class="ci-check">${checkHtml}</td>
+      <td class="ci-fecha">${fechaPago||'<span style="color:var(--text3)">—</span>'}</td>
+      <td class="ci-abono-col">${abonoCell}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="ci-card">
+    <div class="ci-card-head">
+      <div>
+        <div class="ci-card-nombre">${f.nombre}${f.desc?` <span style="font-size:12px;font-weight:400;color:var(--text2)">${f.desc}</span>`:''}</div>
+        <div class="ci-card-info">
+          ${f.tasa_pct}% mensual · Capital: <strong>${fmt(f.monto)}</strong>
+          ${capitalActual < f.monto ? ` · Saldo actual: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>` : ''}
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="ci-interes-mes">${fmt(interesHoy)}<span class="ci-interes-mes-label">/mes</span></div>
+        ${capitalActual < f.monto ? `<div style="font-size:10px;color:var(--green);margin-top:2px"><i class="ti ti-trending-down" style="font-size:9px"></i> Capital reducido</div>` : ''}
+      </div>
+    </div>
+    ${meses.length
+      ? `<table class="ci-table">
+          <thead><tr>
+            <th>Mes</th><th>Interés</th><th></th><th>Fecha pago</th><th style="text-align:right">Abono capital</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>`
+      : `<div style="font-size:12px;color:var(--text3);padding:12px 14px">Sin meses registrados</div>`
+    }
+  </div>`;
 }
 
 function renderHistorial() {
