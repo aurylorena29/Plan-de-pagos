@@ -322,9 +322,8 @@ function renderFuenteCard(f) {
     ? `<span class="tipo-badge propio">Sin interés</span>`
     : `<span class="tipo-badge prestamo">${f.tasa_pct}% mensual</span>`;
 
-  const etiqueta = f.desc
-    ? `<span class="fuente-desc">${f.desc}</span>`
-    : `<span class="fuente-desc" style="color:var(--text3)">${fechaDisp(f.fecha)}</span>`;
+  const etiqueta = `<span class="fuente-fecha" style="font-size:12px;font-weight:600;color:var(--text2)">${fechaDisp(f.fecha)}</span>`;
+  const descLine = f.desc ? `<div style="font-size:11px;color:var(--text3);margin-top:1px">${f.desc}</div>` : '';
 
   const abonosHtml = (f.abonos||[]).length
     ? `<div class="abonos-wrap">${(f.abonos||[]).map(a =>
@@ -373,8 +372,9 @@ function renderFuenteCard(f) {
         <div class="pcard-nombre-row">
           ${tipoBadge}${etiqueta}
         </div>
+        ${descLine}
         <div class="pcard-cuota" style="margin-top:3px">${fmt(f.monto)}${!esPropio&&capitalActual<f.monto?` · Saldo: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>`:''}</div>
-        ${!esPropio?`<div class="pcard-desde"><span style="color:var(--red-mid);font-weight:600">${fmt(interesActual)}/mes</span> · desde ${fechaDisp(f.fecha)}</div>`:`<div class="pcard-desde">Ingresado ${fechaDisp(f.fecha)}</div>`}
+        ${!esPropio?`<div class="pcard-desde"><span style="color:var(--red-mid);font-weight:600">${fmt(interesActual)}/mes</span></div>`:''}
         ${abonosHtml}
       </div>
       <div class="pcard-actions">
