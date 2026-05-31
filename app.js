@@ -535,45 +535,11 @@ function renderControlIntereses() {
   const fuentes = S.fuentes.filter(f =>
     f.tipo === 'prestamo' && f.tasa_pct && (f.consignaciones||[]).length > 0
   );
-
   if (!fuentes.length) {
     el.innerHTML = '<div class="empty"><i class="ti ti-percentage"></i>No hay fuentes con interés activo</div>';
     return;
   }
-
-  const grupos = {};
-  fuentes.forEach(f => {
-    const pid = f.personaId || 0;
-    if (!grupos[pid]) grupos[pid] = [];
-    grupos[pid].push(f);
-  });
-
-  el.innerHTML = Object.entries(grupos).map(([pidStr, fs]) => {
-    const pid     = parseInt(pidStr);
-    const persona = getPersona(pid);
-    const nombre  = persona ? persona.nombre : 'Sin persona';
-    const pi      = S.personas.indexOf(persona);
-    const color   = colorIdx(pi >= 0 ? pi : 0);
-    const ini     = nombre.split(/[\s\/]+/).map(x=>x[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
-
-    const totalAbonos = fs.reduce((s,f) => s + (f.abonos||[]).reduce((a,b) => a+b.monto, 0), 0);
-    const hoy = new Date();
-    const totalPendiente = fs.reduce((s,f) =>
-      s + getMesesFuente(f)
-          .filter(({cuota}) => !cuota || cuota.estado !== 'pagado')
-          .reduce((a,{mes,anio}) => a + getCuotaMes(f,mes,anio), 0), 0);
-
-    return `<div class="responsable-block">
-      <div class="resp-header">
-        <div class="resp-avatar" style="background:${color.bg};color:${color.text}">${ini}</div>
-        <div style="flex:1;min-width:0">
-          <div class="resp-name">${nombre}</div>
-          <div class="resp-info">${fs.length} fuente${fs.length>1?'s':''} con interés${totalAbonos>0?` · <span style="color:var(--green-mid)">${fmt(totalAbonos)} abonados a capital</span>`:''}${totalPendiente>0?` · <span style="color:var(--red-mid)">${fmt(totalPendiente)} pendiente</span>`:''}</div>
-        </div>
-      </div>
-      ${fs.map(f => renderInteresCard(f)).join('')}
-    </div>`;
-  }).join('');
+  el.innerHTML = fuentes.map(f => renderInteresCard(f)).join('');
 }
 
 function renderInteresCard(f) {
@@ -583,20 +549,32 @@ function renderInteresCard(f) {
   const interesHoy    = getCuotaMes(f, hm, hy);
   const meses         = getMesesFuente(f);
 
+  // Día de pago: día del mes de la primera consignación
+  const primeraConsig = [...(f.consignaciones||[])].sort((a,b) => a.fecha.localeCompare(b.fecha))[0];
+  const diaPago = primeraConsig ? parseInt(primeraConsig.fecha.split('-')[2]) : null;
+
+  // Persona asociada
+  const persona = getPersona(f.personaId);
+  const pNombre = persona ? persona.nombre : 'Sin persona';
+  const pi      = S.personas.indexOf(persona);
+  const color   = colorIdx(pi >= 0 ? pi : 0);
+  const ini     = pNombre.split(/[\s\/]+/).map(x=>x[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
+
+  const totalAbonosF = (f.abonos||[]).reduce((s,a) => s+a.monto, 0);
+
   const filas = meses.map(({mes, anio, cuota}) => {
-    const interesMes  = getCuotaMes(f, mes, anio);
-    const pagado      = cuota && cuota.estado === 'pagado';
-    const fechaPago   = pagado && cuota.fecha_pago ? fechaDisp(cuota.fecha_pago) : '';
-    const esActual    = mes === hm && anio === hy;
+    const interesMes    = getCuotaMes(f, mes, anio);
+    const pagado        = cuota && cuota.estado === 'pagado';
+    const fechaPago     = pagado && cuota.fecha_pago ? fechaDisp(cuota.fecha_pago) : '';
+    const esActual      = mes === hm && anio === hy;
+    const venceStr      = diaPago ? `${diaPago} ${MESES_C[mes-1]}` : '—';
 
     const abonosMes     = (f.abonos||[]).filter(a => { const [ay,am]=a.fecha.split('-').map(Number); return ay===anio&&am===mes; });
     const totalAbonoMes = abonosMes.reduce((s,a) => s+a.monto, 0);
 
     const checkHtml = pagado
-      ? `<button class="ci-check-btn" onclick="desmarcarCuota(${f.id},${mes},${anio})" title="Desmarcar pago">
-           <i class="ti ti-circle-check" style="color:var(--green-mid);font-size:17px"></i></button>`
-      : `<button class="ci-check-btn" onclick="abrirPagarCuota(${f.id},${mes},${anio})" title="Registrar pago">
-           <i class="ti ti-circle" style="font-size:17px"></i></button>`;
+      ? `<button class="ci-check-btn" onclick="desmarcarCuota(${f.id},${mes},${anio})" title="Desmarcar pago"><i class="ti ti-circle-check" style="color:var(--green-mid);font-size:17px"></i></button>`
+      : `<button class="ci-check-btn" onclick="abrirPagarCuota(${f.id},${mes},${anio})" title="Registrar pago"><i class="ti ti-circle" style="font-size:17px"></i></button>`;
 
     const abonoCell = totalAbonoMes > 0
       ? `<span class="ci-abono-tag"><i class="ti ti-trending-down" style="font-size:9px;margin-right:3px"></i>${fmt(totalAbonoMes)}</span>`
@@ -604,6 +582,7 @@ function renderInteresCard(f) {
 
     return `<tr class="ci-row${esActual?' ci-row-actual':''}${pagado?' ci-row-pagado':''}">
       <td class="ci-mes">${MESES_C[mes-1]} ${anio}</td>
+      <td class="ci-vence">${venceStr}</td>
       <td class="ci-interes-val" style="${pagado?'color:var(--text3)':'color:var(--red-mid)'}">${fmt(interesMes)}</td>
       <td class="ci-check">${checkHtml}</td>
       <td class="ci-fecha">${fechaPago||'<span style="color:var(--text3)">—</span>'}</td>
@@ -613,22 +592,28 @@ function renderInteresCard(f) {
 
   return `<div class="ci-card">
     <div class="ci-card-head">
-      <div>
-        <div class="ci-card-nombre">${f.nombre}${f.desc?` <span style="font-size:12px;font-weight:400;color:var(--text2)">${f.desc}</span>`:''}</div>
-        <div class="ci-card-info">
-          ${f.tasa_pct}% mensual · Capital: <strong>${fmt(f.monto)}</strong>
-          ${capitalActual < f.monto ? ` · Saldo actual: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>` : ''}
+      <div class="ci-card-persona">
+        <div class="ci-avatar" style="background:${color.bg};color:${color.text}">${ini}</div>
+        <div>
+          <div class="ci-persona-nombre">${pNombre}</div>
+          <div class="ci-card-nombre">${f.nombre}${f.desc?` <span class="ci-card-desc">${f.desc}</span>`:''}</div>
+          <div class="ci-card-info">
+            ${f.tasa_pct}% mensual · Capital: <strong>${fmt(f.monto)}</strong>
+            ${capitalActual < f.monto ? ` · Saldo: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>` : ''}
+            ${diaPago ? ` · <span class="ci-dia-pago"><i class="ti ti-calendar-due" style="font-size:10px;margin-right:2px;vertical-align:-1px"></i>Pago día ${diaPago}</span>` : ''}
+          </div>
         </div>
       </div>
-      <div style="text-align:right;flex-shrink:0">
+      <div class="ci-card-right">
         <div class="ci-interes-mes">${fmt(interesHoy)}<span class="ci-interes-mes-label">/mes</span></div>
-        ${capitalActual < f.monto ? `<div style="font-size:10px;color:var(--green);margin-top:2px"><i class="ti ti-trending-down" style="font-size:9px"></i> Capital reducido</div>` : ''}
+        ${totalAbonosF > 0 ? `<div class="ci-abonado-total"><i class="ti ti-trending-down" style="font-size:9px;margin-right:2px"></i>${fmt(totalAbonosF)} abonado</div>` : ''}
+        <button class="ci-btn-abonar" onclick="abrirAbonar(${f.id})"><i class="ti ti-trending-down" style="font-size:11px;margin-right:3px"></i>Abonar capital</button>
       </div>
     </div>
     ${meses.length
       ? `<table class="ci-table">
           <thead><tr>
-            <th>Mes</th><th>Interés</th><th></th><th>Fecha pago</th><th style="text-align:right">Abono capital</th>
+            <th>Mes</th><th>Vence</th><th>Interés</th><th></th><th>Fecha pago</th><th style="text-align:right">Abono cap.</th>
           </tr></thead>
           <tbody>${filas}</tbody>
         </table>`

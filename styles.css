@@ -689,15 +689,35 @@ body {
   border-bottom: 1px solid var(--border);
   gap: 12px;
 }
-.ci-card-nombre { font-size: 15px; font-weight: 600; }
-.ci-card-info   { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.ci-card-persona   { display: flex; align-items: flex-start; gap: 10px; }
+.ci-avatar {
+  width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.ci-persona-nombre { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.ci-card-nombre    { font-size: 15px; font-weight: 600; }
+.ci-card-desc      { font-size: 12px; font-weight: 400; color: var(--text2); }
+.ci-card-info      { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.ci-dia-pago       { color: var(--amber-mid); font-weight: 600; }
+
+.ci-card-right  { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .ci-interes-mes {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--red-mid);
+  font-size: 19px; font-weight: 700; color: var(--red-mid);
 }
 .ci-interes-mes-label { font-size: 11px; font-weight: 500; color: var(--text3); }
+.ci-abonado-total  { font-size: 10px; color: var(--green-mid); font-weight: 600; }
+.ci-btn-abonar {
+  font-size: 11px; font-weight: 600;
+  color: var(--green); background: var(--green-bg);
+  border: 1px solid var(--green-border);
+  border-radius: 7px; padding: 4px 10px;
+  cursor: pointer; transition: all .15s;
+  display: inline-flex; align-items: center;
+  margin-top: 2px;
+}
+.ci-btn-abonar:hover { background: var(--green-border); }
 
 .ci-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .ci-table thead tr { background: var(--surface2); }
@@ -714,11 +734,13 @@ body {
 .ci-table td { padding: 8px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
 
 .ci-row-actual td { background: rgba(203,240,226,0.09); }
-.ci-row-pagado .ci-mes { color: var(--text3); }
+.ci-row-pagado .ci-mes   { color: var(--text3); }
+.ci-row-pagado .ci-vence { color: var(--text3); }
 
-.ci-mes       { font-weight: 600; white-space: nowrap; }
+.ci-mes         { font-weight: 600; white-space: nowrap; }
+.ci-vence       { font-size: 11px; color: var(--amber-mid); font-weight: 600; white-space: nowrap; }
 .ci-interes-val { font-family: 'IBM Plex Mono', monospace; font-weight: 600; white-space: nowrap; }
-.ci-check     { text-align: center; width: 36px; padding-left: 4px; padding-right: 4px; }
+.ci-check       { text-align: center; width: 36px; padding-left: 4px; padding-right: 4px; }
 .ci-check-btn {
   background: none; border: none; cursor: pointer; padding: 2px;
   color: var(--text3); display: inline-flex; align-items: center;
