@@ -595,8 +595,7 @@ function renderInteresCard(f) {
       <div class="ci-card-persona">
         <div class="ci-avatar" style="background:${color.bg};color:${color.text}">${ini}</div>
         <div>
-          <div class="ci-persona-nombre">${pNombre}</div>
-          <div class="ci-card-nombre">${f.nombre}${f.desc?` <span class="ci-card-desc">${f.desc}</span>`:''}</div>
+          <div class="ci-card-nombre">${pNombre}${f.desc?` <span class="ci-card-desc">${f.desc}</span>`:''}</div>
           <div class="ci-card-info">
             ${f.tasa_pct}% mensual · Capital: <strong>${fmt(f.monto)}</strong>
             ${capitalActual < f.monto ? ` · Saldo: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>` : ''}

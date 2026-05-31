@@ -695,7 +695,6 @@ body {
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 700;
 }
-.ci-persona-nombre { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
 .ci-card-nombre    { font-size: 15px; font-weight: 600; }
 .ci-card-desc      { font-size: 12px; font-weight: 400; color: var(--text2); }
 .ci-card-info      { font-size: 11px; color: var(--text2); margin-top: 3px; }
