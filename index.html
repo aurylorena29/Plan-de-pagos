@@ -17,6 +17,7 @@
       <div class="sync-dot" id="sync-dot"></div>
       <span id="sync-text">Conectando...</span>
     </div>
+    <button class="btn-top" onclick="abrirMenuReportes(event)"><i class="ti ti-file-text"></i> Reportes</button>
     <button class="btn-top" onclick="abrirMeta()"><i class="ti ti-target"></i> Meta</button>
     <button class="btn-top accent" onclick="abrirNuevaFuente()"><i class="ti ti-plus"></i> Nueva fuente</button>
   </div>
@@ -33,6 +34,8 @@
 
 <div id="modal"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

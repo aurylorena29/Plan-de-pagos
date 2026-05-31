@@ -134,6 +134,16 @@ body {
 .progress-pct   { color: var(--green); font-weight: 600; }
 .progress-falta { color: var(--text3); }
 
+/* Barra de consignación */
+.progress-bar-consignado {
+  background: rgba(24,62,122,.1);
+}
+.progress-fill-consignado {
+  background: linear-gradient(90deg, var(--blue), #0F2E5E);
+}
+.progress-pct-consignado { color: var(--blue); font-weight: 600; }
+.progress-falta-consignado { color: var(--text3); }
+
 /* ─── SUMMARY METRICS ────────────────────────────────────────── */
 .summary {
   display: grid;
@@ -153,6 +163,7 @@ body {
 .metric-value.green { color: var(--green); }
 .metric-value.red   { color: var(--red-mid); }
 .metric-value.amber { color: var(--amber-mid); }
+.metric-value.blue  { color: var(--blue); }
 
 .metric-mes       { grid-column: span 2; }
 .metric-mes-row   { display: flex; align-items: flex-end; gap: 14px; margin-top: 2px; }
@@ -295,12 +306,78 @@ body {
   gap: 11px;
 }
 .pcard-info { flex: 1; min-width: 0; }
-.pcard-nombre-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.pcard-nombre-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+
+/* Jerarquía visual: Monto > Interés > Fecha */
+.pcard-monto-principal {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.pcard-saldo {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--green-mid);
+}
+.pcard-interes {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--red-mid);
+  margin-bottom: 2px;
+}
+.pcard-fecha {
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 3px;
+}
+.pcard-sin-consignar {
+  font-size: 11px;
+  color: var(--amber);
+  margin-bottom: 2px;
+}
+
+/* Disponible por consignar - prominente */
+.pcard-disponible-consignar {
+  background: rgba(24,62,122,.06);
+  border: 1px solid rgba(24,62,122,.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+.pcard-disponible-label {
+  font-size: 11px;
+  color: var(--text2);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.pcard-disponible-monto {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Totalmente consignado - discreto */
+.pcard-totalmente-consignado {
+  font-size: 11px;
+  color: var(--green-mid);
+  font-weight: 500;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
 .pcard-capital { font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 700; }
 .pcard-cuota   { font-size: 11px; color: var(--text2); margin-top: 1px; }
 .pcard-desde   { font-size: 10px; color: var(--text3); margin-top: 2px; }
 
 .pcard-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.pcard-btn-edit { color: var(--text3); }
+.pcard-btn-edit:hover { background: var(--amber-bg) !important; color: var(--amber-mid) !important; }
+.pcard-btn-bank { color: var(--text3); }
+.pcard-btn-bank:hover { background: var(--blue-bg) !important; color: var(--blue) !important; }
 .pcard-btn-cash { color: var(--text3); }
 .pcard-btn-cash:hover { background: var(--green-bg) !important; color: var(--green) !important; }
 .pcard-btn-del  { color: var(--text3); opacity: .5; }
@@ -326,6 +403,36 @@ body {
 .abono-item  { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
 .abono-desc  { color: var(--text3); }
 .abono-monto { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--green-mid); }
+
+/* ─── CONSIGNACIONES ─────────────────────────────────────────── */
+.consignaciones-wrap { margin-top: 5px; display: flex; flex-direction: column; gap: 2px; }
+.consignacion-item  { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.consignacion-desc  { color: var(--blue); }
+.consignacion-monto { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--blue); }
+.pcard-consignado-total { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+/* Detalle de consignaciones - menos prominente */
+.consignaciones-wrap-detalle {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  opacity: .6;
+}
+.consignacion-item-detalle {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  padding: 1px 0;
+}
+.consignacion-desc-detalle {
+  color: var(--text3);
+}
+.consignacion-monto-detalle {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  color: var(--text3);
+}
 
 /* ─── MES ROWS (cuotas) ──────────────────────────────────────── */
 .mes-row {
@@ -417,11 +524,12 @@ body {
   box-shadow: var(--shadow);
 }
 .hist-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
-.hist-icon.pagado    { background: rgba(10,94,72,.08);   color: var(--green-mid); }
-.hist-icon.pendiente { background: rgba(192,48,48,.08);  color: var(--red-mid); }
-.hist-icon.vencido   { background: rgba(192,48,48,.12);  color: var(--red); }
-.hist-icon.ingreso   { background: rgba(24,62,122,.08);  color: var(--blue); }
-.hist-icon.abono     { background: rgba(10,94,72,.08);   color: var(--green-mid); }
+.hist-icon.pagado       { background: rgba(10,94,72,.08);   color: var(--green-mid); }
+.hist-icon.pendiente    { background: rgba(192,48,48,.08);  color: var(--red-mid); }
+.hist-icon.vencido      { background: rgba(192,48,48,.12);  color: var(--red); }
+.hist-icon.ingreso      { background: rgba(24,62,122,.08);  color: var(--blue); }
+.hist-icon.abono        { background: rgba(10,94,72,.08);   color: var(--green-mid); }
+.hist-icon.consignacion { background: rgba(24,62,122,.08);  color: var(--blue); }
 
 .hist-info  { flex: 1; min-width: 0; }
 .hist-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -430,18 +538,20 @@ body {
 .hist-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
 
 .hist-monto { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 700; }
-.hist-monto.pagado    { color: var(--green-mid); }
-.hist-monto.pendiente { color: var(--red-mid); }
-.hist-monto.vencido   { color: var(--red); }
-.hist-monto.ingreso   { color: var(--blue); }
-.hist-monto.abono     { color: var(--green-mid); }
+.hist-monto.pagado       { color: var(--green-mid); }
+.hist-monto.pendiente    { color: var(--red-mid); }
+.hist-monto.vencido      { color: var(--red); }
+.hist-monto.ingreso      { color: var(--blue); }
+.hist-monto.abono        { color: var(--green-mid); }
+.hist-monto.consignacion { color: var(--blue); }
 
 .hist-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; }
-.hist-badge.pagado    { background: rgba(10,94,72,.08);  color: var(--green); }
-.hist-badge.pendiente { background: rgba(192,48,48,.08); color: var(--red); }
-.hist-badge.vencido   { background: rgba(192,48,48,.12); color: var(--red); }
-.hist-badge.ingreso   { background: rgba(24,62,122,.08); color: var(--blue); }
-.hist-badge.abono     { background: rgba(10,94,72,.08);  color: var(--green); }
+.hist-badge.pagado       { background: rgba(10,94,72,.08);  color: var(--green); }
+.hist-badge.pendiente    { background: rgba(192,48,48,.08); color: var(--red); }
+.hist-badge.vencido      { background: rgba(192,48,48,.12); color: var(--red); }
+.hist-badge.ingreso      { background: rgba(24,62,122,.08); color: var(--blue); }
+.hist-badge.abono        { background: rgba(10,94,72,.08);  color: var(--green); }
+.hist-badge.consignacion { background: rgba(24,62,122,.08); color: var(--blue); }
 
 /* ─── MODAL & FORMS ──────────────────────────────────────────── */
 .overlay {
@@ -528,6 +638,35 @@ body {
 .empty { text-align: center; padding: 40px; color: var(--text3); }
 .empty i { font-size: 38px; display: block; margin-bottom: 8px; opacity: .3; }
 .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text2); font-weight: 600; margin-bottom: 8px; }
+
+/* ─── DROPDOWN MENU ──────────────────────────────────────────── */
+.dropdown-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  padding: 4px;
+  min-width: 200px;
+  z-index: 1000;
+}
+.dropdown-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background .12s;
+}
+.dropdown-item:hover {
+  background: var(--surface2);
+}
+.dropdown-item i {
+  font-size: 14px;
+  color: var(--text2);
+}
 
 /* ─── ANIMATIONS ─────────────────────────────────────────────── */
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }

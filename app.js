@@ -151,9 +151,16 @@ function getCuotaMes(f, mes, anio) {
 
 function getMesesFuente(f) {
   if (f.tipo === 'propio' || !f.tasa_pct) return [];
+
+  // Si no hay consignaciones, no hay intereses aún
+  if (!f.consignaciones || !f.consignaciones.length) return [];
+
+  // Usar la fecha de la primera consignación como inicio
+  const primeraConsignacion = [...(f.consignaciones||[])].sort((a,b) => a.fecha.localeCompare(b.fecha))[0];
+  const inicio = new Date(primeraConsignacion.fecha+'T00:00:00');
+
   const ocultos  = f.mesesOcultos || [];
   const esOculto = (m,y) => ocultos.some(o => o.mes===m && o.anio===y);
-  const inicio   = new Date(f.fecha+'T00:00:00');
   const hoy      = new Date();
   let y = inicio.getFullYear(), m = inicio.getMonth()+2;
   if (m>12) { m=1; y++; }
@@ -185,13 +192,26 @@ function fuentesFiltradas() {
 function calcStats() {
   const hoy = new Date();
   const hy  = hoy.getFullYear(), hm = hoy.getMonth()+1;
-  let recaudado=0, interesMensual=0, pagadoMes=0, pendienteMes=0;
+  let recaudado=0, interesMensual=0, pagadoMes=0, pendienteMes=0, consignadoTotal=0;
 
   S.fuentes.forEach(f => {
     recaudado      += f.monto;
-    interesMensual += getCuotaMes(f, hm, hy);
+
+    // Sumar todas las consignaciones al concesionario
+    const totalConsignado = (f.consignaciones||[]).reduce((s,c) => s+c.monto, 0);
+    consignadoTotal += totalConsignado;
+
     if (f.tipo==='propio') return;
-    const ini = new Date(f.fecha+'T00:00:00');
+
+    // Solo calcular intereses si hay consignaciones
+    if (!f.consignaciones || !f.consignaciones.length) return;
+
+    // Usar la fecha de la primera consignación
+    const primeraConsignacion = [...(f.consignaciones||[])].sort((a,b) => a.fecha.localeCompare(b.fecha))[0];
+    const ini = new Date(primeraConsignacion.fecha+'T00:00:00');
+
+    interesMensual += getCuotaMes(f, hm, hy);
+
     let fcm = ini.getMonth()+2, fcy = ini.getFullYear();
     if (fcm>12) { fcm=1; fcy++; }
     if (!(hy>fcy || (hy===fcy && hm>=fcm))) return;
@@ -206,7 +226,7 @@ function calcStats() {
 
   const falta = Math.max(0, S.meta.monto - recaudado);
   const pct   = S.meta.monto>0 ? Math.min(100, Math.round(recaudado/S.meta.monto*100)) : 0;
-  return { recaudado, interesMensual, pagadoMes, pendienteMes, falta, pct, hm, hy };
+  return { recaudado, interesMensual, pagadoMes, pendienteMes, consignadoTotal, falta, pct, hm, hy };
 }
 
 // ── Render ────────────────────────────────────────────────────────
@@ -244,6 +264,9 @@ function renderMeta() {
     return;
   }
   const s = calcStats();
+  const pctConsignado = s.recaudado > 0 ? Math.min(100, Math.round(s.consignadoTotal/s.recaudado*100)) : 0;
+  const faltaConsignar = Math.max(0, s.recaudado - s.consignadoTotal);
+
   el.innerHTML=`<div class="meta-card">
     <div class="meta-top">
       <div>
@@ -256,7 +279,14 @@ function renderMeta() {
       <div class="progress-bar"><div class="progress-fill" style="width:${s.pct}%"></div></div>
       <div class="progress-labels">
         <span class="progress-pct">${s.pct}% recaudado · ${fmt(s.recaudado)}</span>
-        <span class="progress-falta">${fmt(s.falta)} faltante</span>
+        <span class="progress-falta">${fmt(s.falta)} por recaudar</span>
+      </div>
+    </div>
+    <div class="progress-wrap" style="margin-top:10px">
+      <div class="progress-bar progress-bar-consignado"><div class="progress-fill progress-fill-consignado" style="width:${pctConsignado}%"></div></div>
+      <div class="progress-labels">
+        <span class="progress-pct-consignado"><i class="ti ti-building-bank" style="font-size:10px;vertical-align:-1px;margin-right:2px"></i>${pctConsignado}% consignado · ${fmt(s.consignadoTotal)}</span>
+        <span class="progress-falta-consignado">${fmt(faltaConsignar)} por consignar</span>
       </div>
     </div>
   </div>`;
@@ -264,8 +294,10 @@ function renderMeta() {
 
 function renderSummary() {
   const s = calcStats();
+  const disponibleConcesionario = s.recaudado - s.consignadoTotal;
   document.getElementById('summary').innerHTML=`
     <div class="metric"><div class="metric-label">Total recaudado</div><div class="metric-value green">${fmt(s.recaudado)}</div></div>
+    <div class="metric"><div class="metric-label">Disponibilidad concesionario</div><div class="metric-value blue">${fmt(disponibleConcesionario)}</div></div>
     <div class="metric"><div class="metric-label">Interés mensual</div><div class="metric-value red">${fmt(s.interesMensual)}</div></div>
     <div class="metric metric-mes">
       <div class="metric-label">${MESES_N[s.hm-1]} ${s.hy}</div>
@@ -318,6 +350,11 @@ function renderFuenteCard(f) {
   const hoy           = new Date();
   const interesActual = getCuotaMes(f, hoy.getMonth()+1, hoy.getFullYear());
 
+  // Determinar fecha de inicio de intereses
+  const primeraConsignacion = (f.consignaciones||[]).length
+    ? [...(f.consignaciones||[])].sort((a,b) => a.fecha.localeCompare(b.fecha))[0]
+    : null;
+
   const tipoBadge = esPropio
     ? `<span class="tipo-badge propio">Sin interés</span>`
     : `<span class="tipo-badge prestamo">${f.tasa_pct}% mensual</span>`;
@@ -330,6 +367,17 @@ function renderFuenteCard(f) {
         `<div class="abono-item">
           <span class="abono-desc"><i class="ti ti-corner-down-right" style="font-size:10px;margin-right:3px;color:var(--text3)"></i>${a.desc||fechaDisp(a.fecha)}</span>
           <span class="abono-monto">-${fmt(a.monto)}</span>
+        </div>`).join('')}</div>`
+    : '';
+
+  const totalConsignado = (f.consignaciones||[]).reduce((s,c) => s+c.monto, 0);
+  const disponibleConsignar = f.monto - totalConsignado;
+
+  const consignacionesHtml = (f.consignaciones||[]).length
+    ? `<div class="consignaciones-wrap-detalle">${(f.consignaciones||[]).map(c =>
+        `<div class="consignacion-item-detalle">
+          <span class="consignacion-desc-detalle"><i class="ti ti-building-bank" style="font-size:9px;margin-right:3px;opacity:.6"></i>${c.desc||fechaDisp(c.fecha)}</span>
+          <span class="consignacion-monto-detalle">${fmt(c.monto)}</span>
         </div>`).join('')}</div>`
     : '';
 
@@ -366,6 +414,41 @@ function renderFuenteCard(f) {
     </div>`;
   }
 
+  // Texto de fecha de inicio de intereses
+  let interesTexto = '';
+  if (!esPropio) {
+    if (primeraConsignacion) {
+      interesTexto = `<div class="pcard-interes">${fmt(interesActual)}/mes</div>`;
+    } else {
+      interesTexto = `<div class="pcard-sin-consignar"><i class="ti ti-alert-circle" style="font-size:11px;vertical-align:-1px"></i> Sin consignar — interés inicia al consignar</div>`;
+    }
+  }
+
+  const fechaTexto = primeraConsignacion
+    ? `<div class="pcard-fecha">Interés desde ${fechaDisp(primeraConsignacion.fecha)}</div>`
+    : `<div class="pcard-fecha">Ingresado ${fechaDisp(f.fecha)}</div>`;
+
+  // Info de consignación
+  let consignacionInfo = '';
+  if (totalConsignado > 0) {
+    if (disponibleConsignar > 0) {
+      // Mostrar caja destacada cuando hay disponible
+      consignacionInfo = `
+        <div class="pcard-disponible-consignar">
+          <div class="pcard-disponible-label">Disponible</div>
+          <div class="pcard-disponible-monto">${fmt(disponibleConsignar)}</div>
+        </div>
+        ${consignacionesHtml}`;
+    } else {
+      // Mostrar texto discreto cuando está totalmente consignado
+      consignacionInfo = `
+        <div class="pcard-totalmente-consignado">
+          <i class="ti ti-check" style="font-size:11px;margin-right:3px;vertical-align:-1px"></i>Totalmente consignado
+        </div>
+        ${consignacionesHtml}`;
+    }
+  }
+
   return `<div class="pcard">
     <div class="pcard-head">
       <div class="pcard-info">
@@ -373,11 +456,15 @@ function renderFuenteCard(f) {
           ${tipoBadge}${etiqueta}
         </div>
         ${descLine}
-        <div class="pcard-cuota" style="margin-top:3px">${fmt(f.monto)}${!esPropio&&capitalActual<f.monto?` · Saldo: <strong style="color:var(--green-mid)">${fmt(capitalActual)}</strong>`:''}</div>
-        ${!esPropio?`<div class="pcard-desde"><span style="color:var(--red-mid);font-weight:600">${fmt(interesActual)}/mes</span></div>`:''}
+        <div class="pcard-monto-principal">${fmt(f.monto)}${!esPropio&&capitalActual<f.monto?` <span class="pcard-saldo">· Saldo: ${fmt(capitalActual)}</span>`:''}</div>
+        ${interesTexto}
+        ${fechaTexto}
         ${abonosHtml}
+        ${consignacionInfo}
       </div>
       <div class="pcard-actions">
+        <button class="icon-btn pcard-btn-edit" onclick="abrirEditarFuente(${f.id})" title="Editar fuente"><i class="ti ti-edit"></i></button>
+        <button class="icon-btn pcard-btn-bank" onclick="abrirConsignarFuente(${f.id})" title="Consignar al concesionario"><i class="ti ti-building-bank"></i></button>
         ${!esPropio?`<button class="icon-btn pcard-btn-cash" onclick="abrirAbonar(${f.id})" title="Abonar a capital"><i class="ti ti-trending-down"></i></button>`:''}
         <button class="icon-btn pcard-btn-del" onclick="eliminarFuente(${f.id})" title="Eliminar fuente"><i class="ti ti-trash"></i></button>
       </div>
@@ -440,6 +527,9 @@ function renderHistorial() {
     (f.abonos||[]).forEach(a => {
       eventos.push({ tipo:'abono', fecha:a.fecha, monto:a.monto, desc:a.desc||'Abono', fuente:f.nombre });
     });
+    (f.consignaciones||[]).forEach(c => {
+      eventos.push({ tipo:'consignacion', fecha:c.fecha, monto:c.monto, desc:c.desc||'Consignación', fuente:f.nombre });
+    });
   });
   if (!eventos.length) {
     el.innerHTML='<div class="empty"><i class="ti ti-history"></i>Sin historial registrado</div>';
@@ -473,6 +563,11 @@ function renderHistorial() {
         <div class="hist-icon abono"><i class="ti ti-arrow-up-circle"></i></div>
         <div class="hist-info"><div class="hist-title">${e.fuente}</div><div class="hist-sub">${e.desc}</div></div>
         <div class="hist-right"><span class="hist-monto abono">-${fmt(e.monto)}</span><span class="hist-badge abono">Abono</span></div>
+      </div>`;
+      if (e.tipo==='consignacion') return `<div class="hist-row">
+        <div class="hist-icon consignacion"><i class="ti ti-building-bank"></i></div>
+        <div class="hist-info"><div class="hist-title">${e.fuente}</div><div class="hist-sub">${e.desc}</div></div>
+        <div class="hist-right"><span class="hist-monto consignacion">${fmt(e.monto)}</span><span class="hist-badge consignacion">Consignación</span></div>
       </div>`;
     }).join('');
     return `<div class="hist-grupo"><div class="hist-mes-label">${MESES_N[m-1]} ${y}</div>${rows}</div>`;
@@ -540,6 +635,77 @@ async function desmarcarCuota(fid, mes, anio) {
   const cuota = (f.cuotas||[]).find(c => c.mes===mes && c.anio===anio);
   if (cuota) { cuota.estado='pendiente'; cuota.fecha_pago=null; }
   render(); await guardarTodo();
+}
+
+function abrirConsignarFuente(fid) {
+  const f = S.fuentes.find(x => x.id===fid);
+  const hoy = new Date().toISOString().split('T')[0];
+  const persona = getPersona(f.personaId);
+  const pNombre = persona ? persona.nombre : '';
+  const totalConsignado = (f.consignaciones||[]).reduce((s,c) => s+c.monto, 0);
+  const disponible = f.monto - totalConsignado;
+
+  modal('Consignar al concesionario',
+    `<p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+      <strong>${pNombre}${f.desc?' · '+f.desc:''}</strong><br>
+      Monto total: <strong style="font-family:'IBM Plex Mono',monospace">${fmt(f.monto)}</strong> ·
+      Consignado: <strong style="font-family:'IBM Plex Mono',monospace;color:var(--blue)">${fmt(totalConsignado)}</strong> ·
+      Disponible: <strong style="font-family:'IBM Plex Mono',monospace;color:var(--green-mid)">${fmt(disponible)}</strong>
+    </p>
+    <div class="form-group" style="margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px">
+        <input type="checkbox" id="consig-todo" checked onchange="toggleConsignarTodo(${disponible})" style="width:auto;cursor:pointer">
+        <span>Consignar todo (${fmt(disponible)})</span>
+      </label>
+    </div>
+    <div class="form-group" id="consig-monto-wrap" style="display:none">
+      <label>Monto a consignar ($)</label>
+      <input id="consig-monto" type="number" placeholder="${disponible}" max="${disponible}">
+      <div class="form-hint">Máximo disponible: ${fmt(disponible)}</div>
+    </div>
+    <div class="form-group">
+      <label>Fecha de consignación</label>
+      <input id="consig-fecha" type="date" value="${hoy}" autofocus>
+    </div>
+    <div class="form-group">
+      <label>Descripción (opcional)</label>
+      <input id="consig-desc" type="text" placeholder="Ej: Primera consignación">
+    </div>`,
+    `<button class="btn-cancel" onclick="cerrar()">Cancelar</button>
+     <button class="btn-save" onclick="guardarConsignacionFuente(${fid},${disponible})">Registrar consignación</button>`
+  );
+}
+
+function toggleConsignarTodo(disponible) {
+  const checked = document.getElementById('consig-todo')?.checked;
+  const wrap = document.getElementById('consig-monto-wrap');
+  if (wrap) wrap.style.display = checked ? 'none' : 'block';
+  if (!checked) {
+    setTimeout(() => document.getElementById('consig-monto')?.focus(), 100);
+  }
+}
+
+async function guardarConsignacionFuente(fid, disponible) {
+  const consignarTodo = document.getElementById('consig-todo')?.checked;
+  const monto = consignarTodo ? disponible : (parseFloat(document.getElementById('consig-monto')?.value)||0);
+  const fecha = document.getElementById('consig-fecha')?.value;
+  const desc = document.getElementById('consig-desc')?.value.trim();
+
+  if (!monto||!fecha) { alert('Completa monto y fecha'); return; }
+
+  const f = S.fuentes.find(x => x.id===fid);
+  const totalConsignado = (f.consignaciones||[]).reduce((s,c) => s+c.monto, 0);
+  const disponibleActual = f.monto - totalConsignado;
+
+  if (monto > disponibleActual) {
+    alert(`No puedes consignar más de lo disponible (${fmt(disponibleActual)})`);
+    return;
+  }
+
+  if (!f.consignaciones) f.consignaciones=[];
+  f.consignaciones.push({ id:'c'+S.nextId++, monto, fecha, desc });
+  f.consignaciones.sort((a,b) => a.fecha.localeCompare(b.fecha));
+  cerrar(); render(); await guardarTodo();
 }
 
 function abrirPagarProximoMes(fid) {
@@ -727,7 +893,89 @@ async function guardarFuente() {
     personaId = parseInt(pv);
   }
 
-  S.fuentes.push({ id:S.nextId++, personaId, tipo, monto, tasa_pct:tasa, fecha, desc, cuotas:[], abonos:[], mesesOcultos:[] });
+  S.fuentes.push({ id:S.nextId++, personaId, tipo, monto, tasa_pct:tasa, fecha, desc, cuotas:[], abonos:[], mesesOcultos:[], consignaciones:[] });
+  cerrar(); render(); await guardarTodo();
+}
+
+function abrirEditarFuente(fid) {
+  const f = S.fuentes.find(x => x.id===fid);
+  if (!f) return;
+
+  const persona = getPersona(f.personaId);
+  const pNombre = persona ? persona.nombre : '';
+
+  modal('Editar fuente',
+    `<p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+      <strong>${pNombre}</strong> · Editando información de la fuente
+    </p>
+    <div class="form-group">
+      <label>Tipo</label>
+      <select id="e-tipo" onchange="toggleTipoFormEdit(this.value)">
+        <option value="propio"${f.tipo==='propio'?' selected':''}>Recursos propios — sin interés</option>
+        <option value="prestamo"${f.tipo==='prestamo'?' selected':''}>Préstamo — genera interés</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Monto ($)</label>
+      <input id="e-monto" type="number" value="${f.monto}" oninput="actualizarPreviewFuenteEdit()">
+    </div>
+    <div id="e-tasa-wrap"${f.tipo==='propio'?' style="display:none"':''}>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tasa mensual (%)</label>
+          <input id="e-tasa" type="number" value="${f.tasa_pct||0}" step="0.1" min="0" oninput="actualizarPreviewFuenteEdit()">
+        </div>
+        <div class="form-group">
+          <label>Interés / mes</label>
+          <input id="e-cuota-disp" type="text" readonly placeholder="—" style="background:var(--surface2);color:var(--red-mid);font-family:'IBM Plex Mono',monospace;font-weight:700;cursor:default">
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Descripción (opcional)</label>
+      <input id="e-desc" type="text" value="${f.desc||''}" placeholder="Ej: Segunda cuota, Para negocio...">
+    </div>
+    <div class="form-group">
+      <label>Fecha de ingreso</label>
+      <input id="e-fecha" type="date" value="${f.fecha}">
+      <div class="form-hint">El día de esta fecha define cuándo empieza a generar interés</div>
+    </div>`,
+    `<button class="btn-cancel" onclick="cerrar()">Cancelar</button>
+     <button class="btn-save" onclick="guardarEdicionFuente(${f.id})">Guardar cambios</button>`
+  );
+  actualizarPreviewFuenteEdit();
+}
+
+function toggleTipoFormEdit(v) {
+  document.getElementById('e-tasa-wrap').style.display = v==='propio' ? 'none' : 'block';
+}
+
+function actualizarPreviewFuenteEdit() {
+  const monto = parseFloat(document.getElementById('e-monto')?.value)||0;
+  const tasa  = parseFloat(document.getElementById('e-tasa')?.value)||0;
+  const el    = document.getElementById('e-cuota-disp');
+  if (el) el.value = monto&&tasa ? fmt(Math.round(monto*tasa/100)) : '';
+}
+
+async function guardarEdicionFuente(fid) {
+  const f = S.fuentes.find(x => x.id===fid);
+  if (!f) return;
+
+  const tipo = document.getElementById('e-tipo').value;
+  const monto= parseFloat(document.getElementById('e-monto').value)||0;
+  const tasa = tipo==='propio' ? 0 : (parseFloat(document.getElementById('e-tasa')?.value)||0);
+  const fecha= document.getElementById('e-fecha').value;
+  const desc = document.getElementById('e-desc')?.value.trim() || '';
+
+  if (!monto||!fecha) { alert('Completa el monto y la fecha'); return; }
+
+  // Actualizar fuente
+  f.tipo = tipo;
+  f.monto = monto;
+  f.tasa_pct = tasa;
+  f.fecha = fecha;
+  f.desc = desc;
+
   cerrar(); render(); await guardarTodo();
 }
 
@@ -855,13 +1103,14 @@ function actualizarHojas(ss, data) {
   const meses = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   let hF = ss.getSheetByName('fuentes') || ss.insertSheet('fuentes');
   hF.clearContents();
-  hF.getRange(1,1,1,6).setValues([['Nombre','Tipo','Monto original','Tasa %','Fecha','Capital actual']]);
+  hF.getRange(1,1,1,7).setValues([['Nombre','Tipo','Monto original','Tasa %','Fecha','Capital actual','Consignado']]);
   if (data.fuentes && data.fuentes.length) {
     const rows = data.fuentes.map(f => {
       const ab = (f.abonos||[]).reduce((s,a)=>s+a.monto,0);
-      return [f.nombre, f.tipo, f.monto, f.tasa_pct||0, f.fecha, f.monto-ab];
+      const cons = (f.consignaciones||[]).reduce((s,c)=>s+c.monto,0);
+      return [f.nombre, f.tipo, f.monto, f.tasa_pct||0, f.fecha, f.monto-ab, cons];
     });
-    hF.getRange(2,1,rows.length,6).setValues(rows);
+    hF.getRange(2,1,rows.length,7).setValues(rows);
   }
   let hC = ss.getSheetByName('cuotas') || ss.insertSheet('cuotas');
   hC.clearContents();
@@ -875,6 +1124,12 @@ function actualizarHojas(ss, data) {
   const allA = [];
   (data.fuentes||[]).forEach(f => (f.abonos||[]).forEach(a => allA.push([f.nombre,a.fecha,a.monto,a.desc||''])));
   if (allA.length) hA.getRange(2,1,allA.length,4).setValues(allA);
+  let hCons = ss.getSheetByName('consignaciones') || ss.insertSheet('consignaciones');
+  hCons.clearContents();
+  hCons.getRange(1,1,1,4).setValues([['Fuente','Fecha','Monto','Descripción']]);
+  const allCons = [];
+  (data.fuentes||[]).forEach(f => (f.consignaciones||[]).forEach(c => allCons.push([f.nombre,c.fecha,c.monto,c.desc||''])));
+  if (allCons.length) hCons.getRange(2,1,allCons.length,4).setValues(allCons);
 }`;
   navigator.clipboard.writeText(code).then(() => {
     const btn = document.querySelector('.copy-btn');
@@ -889,6 +1144,309 @@ async function guardarSetup() {
   localStorage.setItem('gas_url_pp', url);
   cerrar();
   await cargarDatos();
+}
+
+// ── Menú de Reportes ──────────────────────────────────────────────
+function abrirMenuReportes(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('menu-reportes');
+  if (menu) {
+    menu.remove();
+    return;
+  }
+
+  const btn = event.currentTarget;
+  const rect = btn.getBoundingClientRect();
+
+  const menuHtml = `<div id="menu-reportes" class="dropdown-menu" style="position:fixed;top:${rect.bottom + 5}px;right:${window.innerWidth - rect.right}px">
+    <div class="dropdown-item" onclick="generarReportePDF();cerrarMenuReportes()">
+      <i class="ti ti-table"></i> Reporte de Fuentes
+    </div>
+    <div class="dropdown-item" onclick="generarReporteConsignaciones();cerrarMenuReportes()">
+      <i class="ti ti-building-bank"></i> Reporte de Consignaciones
+    </div>
+  </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', menuHtml);
+
+  setTimeout(() => {
+    document.addEventListener('click', cerrarMenuReportes, { once: true });
+  }, 100);
+}
+
+function cerrarMenuReportes() {
+  const menu = document.getElementById('menu-reportes');
+  if (menu) menu.remove();
+}
+
+// ── Reporte PDF Fuentes ───────────────────────────────────────────
+function generarReportePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Título
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('Reporte de Consignaciones', 14, 20);
+
+  // Fecha del reporte
+  const hoy = new Date();
+  const fechaReporte = `${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`;
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Generado: ${fechaReporte}`, 14, 27);
+
+  // Resumen general
+  const stats = calcStats();
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'bold');
+  doc.text('Resumen General', 14, 37);
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(9);
+  doc.text(`Meta: ${fmt(S.meta.monto)}${S.meta.desc?' - '+S.meta.desc:''}`, 14, 43);
+  doc.text(`Recaudado: ${fmt(stats.recaudado)} (${stats.pct}%)`, 14, 48);
+  doc.text(`Consignado al concesionario: ${fmt(stats.consignadoTotal)}`, 14, 53);
+  doc.text(`Disponible por consignar: ${fmt(stats.recaudado - stats.consignadoTotal)}`, 14, 58);
+  doc.text(`Interés mensual total: ${fmt(stats.interesMensual)}`, 14, 63);
+
+  // Preparar datos de la tabla - separar préstamos y propios
+  const tableData = [];
+  const prestamos = S.fuentes.filter(f => f.tipo === 'prestamo');
+  const propios = S.fuentes.filter(f => f.tipo === 'propio');
+
+  // Función para agregar fuente a la tabla
+  const agregarFuente = (f) => {
+    const persona = getPersona(f.personaId);
+    const nombrePersona = persona ? persona.nombre : 'Sin persona';
+    const tipo = f.tipo === 'propio' ? 'Propio' : 'Préstamo';
+    const totalConsignado = (f.consignaciones||[]).reduce((s,c) => s+c.monto, 0);
+    const disponible = f.monto - totalConsignado;
+
+    // Obtener fecha de primera consignación
+    let fechaConsignacion = '-';
+    let fechaInicioInteres = '-';
+    if (f.consignaciones && f.consignaciones.length > 0) {
+      const primeraConsig = [...f.consignaciones].sort((a,b) => a.fecha.localeCompare(b.fecha))[0];
+      fechaConsignacion = fechaDisp(primeraConsig.fecha);
+
+      // Calcular fecha de inicio de interés (un mes después)
+      if (f.tipo === 'prestamo') {
+        const fc = new Date(primeraConsig.fecha+'T00:00:00');
+        let m = fc.getMonth()+2; // +1 para el mes siguiente, +1 porque getMonth es 0-indexed
+        let y = fc.getFullYear();
+        if (m > 12) { m = 1; y++; }
+        fechaInicioInteres = `${String(m).padStart(2,'0')}/${y}`;
+      }
+    }
+
+    const tasa = f.tipo === 'propio' ? '-' : `${f.tasa_pct}%`;
+    const interesActual = f.tipo === 'propio' ? '-' : fmt(getCuotaMes(f, hoy.getMonth()+1, hoy.getFullYear()));
+
+    // Agregar fila con toda la información
+    tableData.push([
+      nombrePersona,
+      f.desc || fechaDisp(f.fecha),
+      tipo,
+      fmt(f.monto),
+      fmt(totalConsignado),
+      fmt(disponible),
+      fechaConsignacion,
+      fechaInicioInteres,
+      tasa,
+      interesActual
+    ]);
+
+    // Agregar detalle de consignaciones si hay
+    if (f.consignaciones && f.consignaciones.length > 1) {
+      f.consignaciones.forEach(c => {
+        tableData.push([
+          '',
+          `  └ ${c.desc || fechaDisp(c.fecha)}`,
+          '',
+          '',
+          fmt(c.monto),
+          '',
+          fechaDisp(c.fecha),
+          '',
+          '',
+          ''
+        ]);
+      });
+    }
+  };
+
+  // Agregar primero los préstamos
+  if (prestamos.length > 0) {
+    prestamos.forEach(agregarFuente);
+  }
+
+  // Agregar separador si hay ambos tipos
+  if (prestamos.length > 0 && propios.length > 0) {
+    tableData.push([
+      { content: 'RECURSOS PROPIOS (SIN INTERÉS)', colSpan: 10, styles: { fillColor: [237, 234, 228], fontStyle: 'bold', halign: 'center', fontSize: 8 } }
+    ]);
+  }
+
+  // Agregar recursos propios
+  if (propios.length > 0) {
+    propios.forEach(agregarFuente);
+  }
+
+  // Generar tabla
+  doc.autoTable({
+    startY: 70,
+    head: [[
+      'Persona',
+      'Fuente',
+      'Tipo',
+      'Monto',
+      'Consignado',
+      'Disponible',
+      'Fecha Consig.',
+      'Inicio Interés',
+      'Tasa',
+      'Interés/mes'
+    ]],
+    body: tableData,
+    styles: {
+      fontSize: 7,
+      cellPadding: 2,
+      overflow: 'linebreak'
+    },
+    headStyles: {
+      fillColor: [26, 24, 20],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7
+    },
+    columnStyles: {
+      0: { cellWidth: 25 },
+      1: { cellWidth: 25 },
+      2: { cellWidth: 15 },
+      3: { cellWidth: 20, halign: 'right' },
+      4: { cellWidth: 20, halign: 'right' },
+      5: { cellWidth: 20, halign: 'right' },
+      6: { cellWidth: 18 },
+      7: { cellWidth: 18 },
+      8: { cellWidth: 12, halign: 'center' },
+      9: { cellWidth: 20, halign: 'right' }
+    },
+    alternateRowStyles: {
+      fillColor: [245, 243, 238]
+    }
+  });
+
+  // Guardar PDF
+  const nombreArchivo = `Reporte-Fuentes-${fechaReporte.replace(/\//g,'-')}.pdf`;
+  doc.save(nombreArchivo);
+}
+
+// ── Reporte PDF Consignaciones ────────────────────────────────────
+function generarReporteConsignaciones() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Título
+  doc.setFontSize(18);
+  doc.setFont(undefined, 'bold');
+  doc.text('Reporte de Consignaciones al Concesionario', 14, 20);
+
+  // Fecha del reporte
+  const hoy = new Date();
+  const fechaReporte = `${hoy.getDate()}/${hoy.getMonth()+1}/${hoy.getFullYear()}`;
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Generado: ${fechaReporte}`, 14, 27);
+
+  // Recolectar todas las consignaciones
+  const todasConsignaciones = [];
+  S.fuentes.forEach(f => {
+    const persona = getPersona(f.personaId);
+    const nombrePersona = persona ? persona.nombre : 'Sin persona';
+
+    (f.consignaciones || []).forEach(c => {
+      todasConsignaciones.push({
+        fecha: c.fecha,
+        persona: nombrePersona,
+        fuente: f.desc || 'Sin descripción',
+        monto: c.monto,
+        descripcion: c.desc || '-'
+      });
+    });
+  });
+
+  // Ordenar por fecha (más reciente primero)
+  todasConsignaciones.sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  // Calcular totales
+  const totalConsignado = todasConsignaciones.reduce((sum, c) => sum + c.monto, 0);
+  const stats = calcStats();
+
+  // Resumen
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'bold');
+  doc.text('Resumen', 14, 37);
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(9);
+  doc.text(`Total consignado: ${fmt(totalConsignado)}`, 14, 43);
+  doc.text(`Número de consignaciones: ${todasConsignaciones.length}`, 14, 48);
+  doc.text(`Total recaudado: ${fmt(stats.recaudado)}`, 14, 53);
+  doc.text(`Disponible por consignar: ${fmt(stats.recaudado - totalConsignado)}`, 14, 58);
+
+  if (todasConsignaciones.length === 0) {
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text('No hay consignaciones registradas aún', 14, 75);
+    doc.save(`Reporte-Consignaciones-${fechaReporte.replace(/\//g,'-')}.pdf`);
+    return;
+  }
+
+  // Preparar datos para la tabla
+  const tableData = todasConsignaciones.map(c => [
+    fechaDisp(c.fecha),
+    c.persona,
+    c.fuente,
+    c.descripcion,
+    fmt(c.monto)
+  ]);
+
+  // Generar tabla
+  doc.autoTable({
+    startY: 65,
+    head: [['Fecha', 'Persona', 'Fuente', 'Descripción', 'Monto']],
+    body: tableData,
+    foot: [['', '', '', 'TOTAL CONSIGNADO', fmt(totalConsignado)]],
+    styles: {
+      fontSize: 9,
+      cellPadding: 3
+    },
+    headStyles: {
+      fillColor: [24, 62, 122],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    footStyles: {
+      fillColor: [210, 229, 249],
+      textColor: [24, 62, 122],
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    columnStyles: {
+      0: { cellWidth: 25, halign: 'center' },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 40 },
+      3: { cellWidth: 50 },
+      4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+    },
+    alternateRowStyles: {
+      fillColor: [245, 243, 238]
+    }
+  });
+
+  // Guardar PDF
+  const nombreArchivo = `Reporte-Consignaciones-${fechaReporte.replace(/\//g,'-')}.pdf`;
+  doc.save(nombreArchivo);
 }
 
 // ── Init ──────────────────────────────────────────────────────────
