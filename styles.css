@@ -298,6 +298,10 @@ body {
   overflow: hidden;
   margin-bottom: 10px;
 }
+.pcard.consignada-total {
+  border-color: var(--green-border);
+  background: rgba(203,240,226,0.13);
+}
 .pcard-head {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);

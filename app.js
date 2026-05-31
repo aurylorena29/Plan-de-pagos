@@ -449,7 +449,7 @@ function renderFuenteCard(f) {
     }
   }
 
-  return `<div class="pcard">
+  return `<div class="pcard${disponibleConsignar<=0?' consignada-total':''}">
     <div class="pcard-head">
       <div class="pcard-info">
         <div class="pcard-nombre-row">
