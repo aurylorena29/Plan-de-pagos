@@ -464,7 +464,7 @@ function renderFuenteCard(f) {
       </div>
       <div class="pcard-actions">
         <button class="icon-btn pcard-btn-edit" onclick="abrirEditarFuente(${f.id})" title="Editar fuente"><i class="ti ti-edit"></i></button>
-        <button class="icon-btn pcard-btn-bank" onclick="abrirConsignarFuente(${f.id})" title="Consignar al concesionario"><i class="ti ti-building-bank"></i></button>
+        <button class="icon-btn pcard-btn-bank" onclick="abrirConsignarFuente(${f.id})" title="Consignar al concesionario"${disponibleConsignar<=0?' disabled style="opacity:.35;cursor:not-allowed"':''}><i class="ti ti-building-bank"></i></button>
         ${!esPropio?`<button class="icon-btn pcard-btn-cash" onclick="abrirAbonar(${f.id})" title="Abonar a capital"><i class="ti ti-trending-down"></i></button>`:''}
         <button class="icon-btn pcard-btn-del" onclick="eliminarFuente(${f.id})" title="Eliminar fuente"><i class="ti ti-trash"></i></button>
       </div>
